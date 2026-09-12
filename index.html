@@ -370,6 +370,12 @@
         <p class="sub" style="margin:16px 0 10px;">配布が完了したら、不要になったお名前・ご住所をこの端末から削除できます。</p>
         <button class="btn btn-quiet" style="color:var(--danger); border-color:var(--danger);" onclick="clearDeliveredLocalInfo()">配布済みのお名前・住所をまとめて削除</button>
       </section>
+
+      <section>
+        <h2 style="color:var(--danger); border-left-color:var(--danger);">登録のリセット</h2>
+        <p class="sub" style="margin-bottom:14px;">この班の対象者登録をすべて削除し、最初からやり直せます。人数の確定状況も含めて元に戻ります。誤って押した場合、元に戻すことはできません。</p>
+        <button class="btn btn-quiet" style="color:var(--danger); border-color:var(--danger);" onclick="resetHan()">この班の登録をすべてリセットする</button>
+      </section>
     </main>
     <footer class="app-footer"><button onclick="logout()">ログアウト</button></footer>
   </div>
@@ -385,22 +391,44 @@
     </header>
     <main>
       <section>
-        <h2>合計人数（確定分のみ）</h2>
-        <div class="totals">
-          <div class="box"><b id="total80">0</b><span>80歳</span></div>
-          <div class="box"><b id="total90">0</b><span>90歳</span></div>
-          <div class="box"><b id="total100">0</b><span>100歳</span></div>
+        <div class="role-tabs" style="margin-bottom:4px;">
+          <button id="adminTabBtnList" class="active" onclick="setAdminTab('list')">班一覧</button>
+          <button id="adminTabBtnSummary" onclick="setAdminTab('summary')">配布集計</button>
         </div>
       </section>
-      <section>
-        <h2>班ごとの状況</h2>
-        <table class="admin-table">
-          <thead>
-            <tr><th style="text-align:left;">班</th><th>状態</th><th>80</th><th>90</th><th>100</th><th>配布</th></tr>
-          </thead>
-          <tbody id="adminTableBody"></tbody>
-        </table>
-      </section>
+
+      <div id="adminTabHanList">
+        <section>
+          <h2>合計人数（確定分のみ）</h2>
+          <div class="totals">
+            <div class="box"><b id="total80">0</b><span>80歳</span></div>
+            <div class="box"><b id="total90">0</b><span>90歳</span></div>
+            <div class="box"><b id="total100">0</b><span>100歳</span></div>
+          </div>
+        </section>
+        <section>
+          <h2>班ごとの状況</h2>
+          <table class="admin-table">
+            <thead>
+              <tr><th style="text-align:left;">班</th><th>状態</th><th>80</th><th>90</th><th>100</th><th>配布</th></tr>
+            </thead>
+            <tbody id="adminTableBody"></tbody>
+          </table>
+        </section>
+      </div>
+
+      <div id="adminTabSummary" class="hidden">
+        <section>
+          <h2>配布日ごとの集計</h2>
+          <p class="sub" style="margin-bottom:14px;">班ごとに、いつ何人へ配布したかと、残りの配布数を確認できます（登録がある班のみ表示）。</p>
+          <div style="overflow-x:auto;">
+            <table class="admin-table" id="summaryTable">
+              <thead id="summaryTableHead"></thead>
+              <tbody id="summaryTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
 
       <section>
         <h2>PIN設定</h2>
@@ -429,6 +457,20 @@
     <div class="modal-actions">
       <button class="btn btn-quiet" onclick="closeNameModal()">閉じる</button>
       <button class="btn btn-primary" onclick="saveNameModal()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 配布日 選択モーダル ===================== -->
+<div class="modal-back" id="deliverModalBack">
+  <div class="modal">
+    <h3>配布日を選択</h3>
+    <div class="hint">いつプレゼントをお渡ししたかを記録します。</div>
+    <label for="deliverDateInput">配布日</label>
+    <input type="date" id="deliverDateInput">
+    <div class="modal-actions">
+      <button class="btn btn-quiet" onclick="closeDeliverModal()">閉じる</button>
+      <button class="btn btn-primary" onclick="saveDeliverModal()">配布済みにする</button>
     </div>
   </div>
 </div>
@@ -538,6 +580,11 @@ function watchSettings(){
     const adminPinField = document.getElementById("settingsAdminPin");
     if(hanPinField && document.activeElement !== hanPinField) hanPinField.value = currentSettings.hanPin;
     if(adminPinField && document.activeElement !== adminPinField) adminPinField.value = currentSettings.adminPin;
+    // ログイン画面の班長用PIN欄にも、現在のPINをあらかじめ入力しておく（編集中でなければ）
+    const loginHanPinField = document.getElementById("hanPinInput");
+    if(loginHanPinField && document.activeElement !== loginHanPinField){
+      loginHanPinField.value = currentSettings.hanPin;
+    }
   }, err => {
     console.error(err);
     showConnError("PIN設定の読み込みに失敗しました。通信状況をご確認ください。");
@@ -705,6 +752,7 @@ function renderHan(){
       const local = getLocalInfo(e.id);
       const div = document.createElement("div");
       div.className = "entry" + (e.delivered ? " delivered" : "");
+      const deliveredLabel = e.delivered ? "配布済み（" + formatDateJp(e.deliveredAt) + "）" : "配布済みにする";
       div.innerHTML = `
         <div class="entry-row">
           <div>
@@ -712,12 +760,13 @@ function renderHan(){
             ${local && (local.name || local.address) ? `<div class="entry-name">${escapeHtml(local.name || "")}${local.name && local.address ? "　" : ""}${escapeHtml(local.address || "")}</div>` : `<div class="entry-name">お名前未登録</div>`}
           </div>
           <div class="entry-actions">
-            <button class="check-btn ${e.delivered ? "on" : ""}" onclick="toggleDelivered('${e.id}', ${!e.delivered})">${e.delivered ? "配布済み" : "配布済みにする"}</button>
+            <button class="check-btn ${e.delivered ? "on" : ""}" onclick="openDeliverModal('${e.id}')">${deliveredLabel}</button>
           </div>
         </div>
         <div style="margin-top:8px; display:flex; gap:14px; flex-wrap:wrap;">
           <button class="icon-btn" onclick="openNameModal('${e.id}', ${idx+1})">お名前・住所を編集</button>
           ${local && (local.name || local.address) ? `<button class="icon-btn" onclick="clearOneLocalInfo('${e.id}')" style="color:var(--danger);">お名前・住所を削除</button>` : ""}
+          ${e.delivered ? `<button class="icon-btn" onclick="revertDelivered('${e.id}')" style="color:var(--danger);">配布前に戻す</button>` : ""}
           ${locked ? "" : `<button class="icon-btn" onclick="removeEntry('${e.id}')" style="color:var(--danger);">この対象者を削除</button>`}
         </div>
       `;
@@ -775,22 +824,61 @@ function removeEntry(id){
     });
 }
 
-function toggleDelivered(id, value){
+// JST環境でも日付がずれないよう、ローカル日付コンポーネントから "YYYY-MM-DD" を作る
+function toLocalDateStr(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function formatDateJp(dateStr){
+  if(!dateStr) return "";
+  const parts = dateStr.split("-");
+  if(parts.length !== 3) return dateStr;
+  return parseInt(parts[1],10) + "/" + parseInt(parts[2],10);
+}
+
+function setDelivered(id, value, deliveredAt){
+  const prev = currentData.entries && currentData.entries[id] ? { ...currentData.entries[id] } : null;
   if(currentData.entries && currentData.entries[id]){
     currentData.entries[id].delivered = value;
+    currentData.entries[id].deliveredAt = value ? deliveredAt : null;
     renderHan();
   }
 
   const patch = { entries: { [id]: { delivered: value } } };
+  patch.entries[id].deliveredAt = value ? deliveredAt : firebase.firestore.FieldValue.delete();
   db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
     .catch(err => {
       console.error(err);
-      if(currentData.entries && currentData.entries[id]){
-        currentData.entries[id].delivered = !value;
-        renderHan();
-      }
+      if(prev && currentData.entries){ currentData.entries[id] = prev; renderHan(); }
       alert("更新に失敗しました。通信状況をご確認のうえ、もう一度お試しください。");
     });
+}
+
+function revertDelivered(id){
+  if(!confirm("配布前の状態に戻しますか？")) return;
+  setDelivered(id, false, null);
+}
+
+let deliveringEntryId = null;
+function openDeliverModal(id){
+  deliveringEntryId = id;
+  const entry = currentData.entries && currentData.entries[id];
+  const dateInput = document.getElementById("deliverDateInput");
+  dateInput.value = (entry && entry.deliveredAt) ? entry.deliveredAt : toLocalDateStr(new Date());
+  document.getElementById("deliverModalBack").classList.add("show");
+}
+function closeDeliverModal(){
+  document.getElementById("deliverModalBack").classList.remove("show");
+  deliveringEntryId = null;
+}
+function saveDeliverModal(){
+  const dateVal = document.getElementById("deliverDateInput").value;
+  if(!dateVal){ alert("配布日を選択してください。"); return; }
+  const id = deliveringEntryId;
+  closeDeliverModal();
+  setDelivered(id, true, dateVal);
 }
 
 function confirmHan(){
@@ -799,6 +887,28 @@ function confirmHan(){
     status: "confirmed",
     confirmedAt: firebase.firestore.FieldValue.serverTimestamp()
   }, { merge:true }).catch(err=>{ console.error(err); alert("確定の保存に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
+}
+
+function resetHan(){
+  if(!confirm("本当にこの班の登録をすべて削除します。この操作は元に戻せません。よろしいですか？")) return;
+  if(!confirm("最終確認です。人数・配布状況もすべて消えます。本当にリセットしますか？")) return;
+
+  const backup = currentData;
+  currentData = { status: "draft", entries: {} };
+  renderHan();
+
+  db.collection(COLLECTION).doc(currentHanDocId()).set({
+    status: "draft",
+    entries: {},
+    confirmedAt: firebase.firestore.FieldValue.delete()
+  }, { merge:true })
+    .then(()=>{ localStorage.removeItem(localKey()); })
+    .catch(err => {
+      console.error(err);
+      currentData = backup;
+      renderHan();
+      alert("リセットに失敗しました。通信状況をご確認のうえ、もう一度お試しください。");
+    });
 }
 
 /* ---------- 氏名・住所（この端末のlocalStorageのみ） ---------- */
@@ -888,11 +998,23 @@ function watchAdmin(){
     hideConnError();
     const byHan = {};
     snap.forEach(doc => { byHan[doc.id] = doc.data(); });
+    latestAdminByHan = byHan;
     renderAdmin(byHan);
+    renderAdminSummary(byHan);
   }, err => {
     console.error(err);
     showConnError("一覧の読み込みに失敗しました。通信状況をご確認ください。");
   });
+}
+
+let latestAdminByHan = {};
+let adminTab = "list";
+function setAdminTab(tab){
+  adminTab = tab;
+  document.getElementById("adminTabBtnList").classList.toggle("active", tab==="list");
+  document.getElementById("adminTabBtnSummary").classList.toggle("active", tab==="summary");
+  document.getElementById("adminTabHanList").classList.toggle("hidden", tab!=="list");
+  document.getElementById("adminTabSummary").classList.toggle("hidden", tab!=="summary");
 }
 
 function renderAdmin(byHan){
@@ -919,6 +1041,7 @@ function renderAdmin(byHan){
           <td class="han-no">${g}班</td>
           <td><span class="tag ${tagClass}">${tagLabel}</span>
             ${status==="confirmed" ? `<div><button class="unlock-btn" onclick="unlockHan('${docId}')">確定を解除</button></div>` : ""}
+            ${entries.length>0 ? `<div><button class="unlock-btn" style="color:var(--danger);" onclick="resetHanFromAdmin('${docId}')">リセット</button></div>` : ""}
           </td>
           <td>${c80}</td>
           <td>${c90}</td>
@@ -932,6 +1055,83 @@ function renderAdmin(byHan){
   document.getElementById("total90").textContent = t90;
   document.getElementById("total100").textContent = t100;
   document.getElementById("adminTableBody").innerHTML = rows.join("");
+}
+
+function renderAdminSummary(byHan){
+  const dateSet = new Set();
+  const rows = [];
+  BRANCHES.forEach(branch => {
+    for(let g=1; g<=branch.groups; g++){
+      const docId = hanDocId(branch.id, g);
+      const data = byHan[docId];
+      const entries = entriesArray(data);
+      if(entries.length === 0) continue;
+      const deliveredByDate = {};
+      entries.forEach(e => {
+        if(e.delivered && e.deliveredAt){
+          dateSet.add(e.deliveredAt);
+          deliveredByDate[e.deliveredAt] = (deliveredByDate[e.deliveredAt] || 0) + 1;
+        }
+      });
+      const deliveredTotal = entries.filter(e => e.delivered).length;
+      rows.push({
+        label: hanLabel(branch.id, g),
+        total: entries.length,
+        deliveredByDate,
+        deliveredTotal,
+        remaining: entries.length - deliveredTotal
+      });
+    }
+  });
+  const dates = Array.from(dateSet).sort();
+
+  const thead = document.getElementById("summaryTableHead");
+  thead.innerHTML = `<tr><th style="text-align:left;">班</th>${dates.map(d=>`<th>${formatDateJp(d)}</th>`).join("")}<th>配布済み計</th><th>残り</th></tr>`;
+
+  const tbody = document.getElementById("summaryTableBody");
+  if(rows.length === 0){
+    tbody.innerHTML = `<tr><td style="color:var(--muted); padding:16px 6px;">まだ登録がありません。</td></tr>`;
+    return;
+  }
+
+  const totalRow = { deliveredByDate:{}, deliveredTotal:0, remaining:0 };
+  dates.forEach(d => totalRow.deliveredByDate[d] = 0);
+  rows.forEach(r => {
+    dates.forEach(d => { totalRow.deliveredByDate[d] += (r.deliveredByDate[d] || 0); });
+    totalRow.deliveredTotal += r.deliveredTotal;
+    totalRow.remaining += r.remaining;
+  });
+
+  const bodyRows = rows.map(r => `
+    <tr>
+      <td class="han-no">${r.label}</td>
+      ${dates.map(d => `<td>${r.deliveredByDate[d] || "-"}</td>`).join("")}
+      <td>${r.deliveredTotal}</td>
+      <td style="${r.remaining>0 ? "color:var(--danger); font-weight:700;" : ""}">${r.remaining}</td>
+    </tr>
+  `).join("");
+
+  const totalRowHtml = `
+    <tr style="font-weight:700; background:#F2ECE0;">
+      <td class="han-no">合計</td>
+      ${dates.map(d => `<td>${totalRow.deliveredByDate[d]}</td>`).join("")}
+      <td>${totalRow.deliveredTotal}</td>
+      <td>${totalRow.remaining}</td>
+    </tr>
+  `;
+
+  tbody.innerHTML = bodyRows + totalRowHtml;
+}
+
+function resetHanFromAdmin(docId){
+  if(!confirm("この班の登録をすべて削除します。この操作は元に戻せません。よろしいですか？")) return;
+  if(!confirm("最終確認です。人数・配布状況もすべて消えます。本当にリセットしますか？")) return;
+  db.collection(COLLECTION).doc(docId).set({
+    status: "draft",
+    entries: {},
+    confirmedAt: firebase.firestore.FieldValue.delete()
+  }, { merge:true })
+    .catch(err => { console.error(err); alert("リセットに失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
 }
 
 function unlockHan(docId){
