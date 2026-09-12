@@ -366,7 +366,7 @@
       <section>
         <h2>お名前・ご住所の控え（この端末だけに保存）</h2>
         <p class="sub" style="margin-bottom:14px;">お名前やご住所は本部には送信されません。この端末の中だけに保存され、班長さまの手元の控えとしてお使いいただけます。</p>
-        <button class="btn btn-outline" onclick="exportLocalInfo()">控えをテキストでコピーする</button>
+        <button class="btn btn-outline" id="exportBtn" onclick="exportLocalInfo()">控えをテキストでコピーする</button>
         <p class="sub" style="margin:16px 0 10px;">配布が完了したら、不要になったお名前・ご住所をこの端末から削除できます。</p>
         <button class="btn btn-quiet" style="color:var(--danger); border-color:var(--danger);" onclick="clearDeliveredLocalInfo()">配布済みのお名前・住所をまとめて削除</button>
       </section>
@@ -688,6 +688,11 @@ function renderHan(){
   confirmBtn.disabled = locked;
   confirmBtn.style.opacity = locked ? .5 : 1;
 
+  // 対象者が1件もいない場合は控えのコピーもできないようにする
+  const exportBtn = document.getElementById("exportBtn");
+  exportBtn.disabled = entries.length === 0;
+  exportBtn.style.opacity = entries.length === 0 ? .5 : 1;
+
   // 一覧
   const listEl = document.getElementById("entryList");
   const emptyEl = document.getElementById("entryEmpty");
@@ -723,29 +728,67 @@ function renderHan(){
 
 function addEntry(age){
   const id = "e" + Date.now() + Math.floor(Math.random()*1000);
+  const entry = { age, delivered:false, order: Date.now() };
+
+  // 通信を待たず、まず画面にすぐ反映する（反応が分かるようにするため）
+  if(!currentData.entries) currentData.entries = {};
+  currentData.entries[id] = entry;
+  currentData.status = currentData.status || "draft";
+  renderHan();
+
   const patch = {
-    status: currentData.status || "draft",
+    status: currentData.status,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
-  patch["entries." + id] = { age, delivered:false, order: Date.now() };
+  patch["entries." + id] = entry;
   db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
-    .catch(err => { console.error(err); alert("登録の保存に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
+    .catch(err => {
+      console.error(err);
+      if(currentData.entries) delete currentData.entries[id];
+      renderHan();
+      alert("登録の保存に失敗しました。通信状況をご確認のうえ、もう一度お試しください。");
+    });
 }
 
 function removeEntry(id){
   if(!confirm("この対象者を削除しますか？")) return;
+
+  const backup = currentData.entries ? currentData.entries[id] : undefined;
+  if(currentData.entries) delete currentData.entries[id];
+  renderHan();
+  removeLocalInfo(id);
+
   const patch = {};
   patch["entries." + id] = firebase.firestore.FieldValue.delete();
   db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
-    .catch(err => { console.error(err); alert("削除に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
-  removeLocalInfo(id);
+    .catch(err => {
+      console.error(err);
+      if(backup){
+        if(!currentData.entries) currentData.entries = {};
+        currentData.entries[id] = backup;
+        renderHan();
+      }
+      alert("削除に失敗しました。通信状況をご確認のうえ、もう一度お試しください。");
+    });
 }
 
 function toggleDelivered(id, value){
+  if(currentData.entries && currentData.entries[id]){
+    currentData.entries[id].delivered = value;
+    renderHan();
+  }
+
   const patch = {};
   patch["entries." + id + ".delivered"] = value;
   db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
-    .catch(err => { console.error(err); alert("更新に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
+    .catch(err => {
+      console.error(err);
+      if(currentData.entries && currentData.entries[id]){
+        currentData.entries[id].delivered = !value;
+        renderHan();
+      }
+      alert("更新に失敗しました。通信状況をご確認のうえ、もう一度お試しください。");
+    });
 }
 
 function confirmHan(){
@@ -815,6 +858,7 @@ function saveNameModal(){
 
 function exportLocalInfo(){
   const entries = entriesArray(currentData);
+  if(entries.length === 0){ alert("対象者が登録されていないため、控えはありません。"); return; }
   const all = getAllLocalInfo();
   let text = hanLabel(currentBranch, currentGroup) + "　敬老祝い品 対象者控え\n\n";
   entries.forEach((e, idx) => {
