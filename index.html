@@ -289,6 +289,8 @@
 
 <div class="app">
 
+  <div id="connErrorBanner" class="hidden" style="position:fixed; left:12px; right:12px; bottom:12px; z-index:200; background:#A23B3B; color:#fff; padding:11px 16px; border-radius:6px; font-size:13.5px; box-shadow:0 2px 8px rgba(0,0,0,.2); max-width:456px; margin:0 auto;"></div>
+
   <!-- ===================== ログイン画面 ===================== -->
   <div id="loginScreen">
     <header class="top">
@@ -320,7 +322,7 @@
         </div>
 
         <button class="btn btn-primary" onclick="login()">入る</button>
-        <div class="error-msg" id="loginError">PINが違います。回覧板をご確認ください。</div>
+        <div class="error-msg" id="loginError">PINが違います。LINE等でご確認ください。</div>
       </div>
     </main>
   </div>
@@ -481,10 +483,20 @@ const db = firebase.firestore();
 let currentRole = "han";   // "han" | "admin"
 let currentBranch = null;  // 支部ID
 let currentGroup = null;   // 班番号（数値）
-let currentData = { status: "draft", entries: [] };
+let currentData = { status: "draft", entries: {} };
 let currentSettings = { hanPin: DEFAULT_HAN_PIN, adminPin: DEFAULT_ADMIN_PIN };
 let unsubscribe = null;
 let unsubscribeSettings = null;
+let settingsLoaded = false;
+
+function showConnError(msg){
+  const el = document.getElementById("connErrorBanner");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+function hideConnError(){
+  document.getElementById("connErrorBanner").classList.add("hidden");
+}
 
 /* ---------- PIN設定（Firestoreの _settings ドキュメントで一元管理） ---------- */
 function watchSettings(){
@@ -498,12 +510,16 @@ function watchSettings(){
     } else {
       currentSettings = { hanPin: DEFAULT_HAN_PIN, adminPin: DEFAULT_ADMIN_PIN };
     }
+    settingsLoaded = true;
     // 本部画面が開いていれば入力欄にも反映（編集中でなければ）
     const hanPinField = document.getElementById("settingsHanPin");
     const adminPinField = document.getElementById("settingsAdminPin");
     if(hanPinField && document.activeElement !== hanPinField) hanPinField.value = currentSettings.hanPin;
     if(adminPinField && document.activeElement !== adminPinField) adminPinField.value = currentSettings.adminPin;
-  }, err => console.error(err));
+  }, err => {
+    console.error(err);
+    showConnError("PIN設定の読み込みに失敗しました。通信状況をご確認ください。");
+  });
 }
 watchSettings(); // ログイン画面でもPIN照合に使うため常時購読
 
@@ -565,6 +581,12 @@ function setRole(role){
 
 function login(){
   const errEl = document.getElementById("loginError");
+  if(!settingsLoaded){
+    errEl.textContent = "PIN情報を読み込み中です。数秒待ってからもう一度お試しください。";
+    errEl.style.display = "block";
+    return;
+  }
+  errEl.textContent = "PINが違います。LINE等でご確認ください。";
   if(currentRole === "han"){
     const branchId = document.getElementById("branchSelect").value;
     const group = document.getElementById("groupSelect").value;
@@ -585,6 +607,7 @@ function login(){
 
 function logout(){
   if(unsubscribe){ unsubscribe(); unsubscribe = null; }
+  hideConnError();
   sessionStorage.removeItem("keirouSession");
   showScreen("login");
 }
@@ -601,15 +624,24 @@ function watchHan(branchId, group){
   const docId = hanDocId(branchId, group);
   const ref = db.collection(COLLECTION).doc(docId);
   unsubscribe = ref.onSnapshot(snap => {
-    currentData = snap.exists ? snap.data() : { status: "draft", entries: [] };
+    hideConnError();
+    currentData = snap.exists ? snap.data() : { status: "draft", entries: {} };
     renderHan();
   }, err => {
     console.error(err);
+    showConnError("データの読み込みに失敗しました。通信状況をご確認ください。");
   });
 }
 
+// 対象者マップ（{id: {age, delivered, order}}）を、表示用に登録順の配列へ変換
+function entriesArray(data){
+  const map = (data && data.entries) || {};
+  return Object.keys(map).map(id => ({ id, ...map[id] }))
+    .sort((a,b) => (a.order||0) - (b.order||0));
+}
+
 function renderHan(){
-  const entries = currentData.entries || [];
+  const entries = entriesArray(currentData);
   const status = currentData.status || "draft";
 
   // 内訳
@@ -650,7 +682,7 @@ function renderHan(){
         <div class="entry-row">
           <div>
             <div class="entry-title">対象者${idx+1} <span class="entry-age">・${e.age}歳</span></div>
-            ${local && local.name ? `<div class="entry-name">${escapeHtml(local.name)}${local.address ? "　"+escapeHtml(local.address) : ""}</div>` : `<div class="entry-name">お名前未登録</div>`}
+            ${local && (local.name || local.address) ? `<div class="entry-name">${escapeHtml(local.name || "")}${local.name && local.address ? "　" : ""}${escapeHtml(local.address || "")}</div>` : `<div class="entry-name">お名前未登録</div>`}
           </div>
           <div class="entry-actions">
             <button class="check-btn ${e.delivered ? "on" : ""}" onclick="toggleDelivered('${e.id}', ${!e.delivered})">${e.delivered ? "配布済み" : "配布済みにする"}</button>
@@ -658,7 +690,7 @@ function renderHan(){
         </div>
         <div style="margin-top:8px; display:flex; gap:14px; flex-wrap:wrap;">
           <button class="icon-btn" onclick="openNameModal('${e.id}', ${idx+1})">お名前・住所を編集</button>
-          ${local && local.name ? `<button class="icon-btn" onclick="clearOneLocalInfo('${e.id}')" style="color:var(--danger);">お名前・住所を削除</button>` : ""}
+          ${local && (local.name || local.address) ? `<button class="icon-btn" onclick="clearOneLocalInfo('${e.id}')" style="color:var(--danger);">お名前・住所を削除</button>` : ""}
           ${locked ? "" : `<button class="icon-btn" onclick="removeEntry('${e.id}')" style="color:var(--danger);">この対象者を削除</button>`}
         </div>
       `;
@@ -669,25 +701,29 @@ function renderHan(){
 
 function addEntry(age){
   const id = "e" + Date.now() + Math.floor(Math.random()*1000);
-  const entries = (currentData.entries || []).concat([{ id, age, delivered:false }]);
-  // fire-and-forget：書き込み完了を待たずに進める
-  db.collection(COLLECTION).doc(currentHanDocId()).set({
+  const patch = {
     status: currentData.status || "draft",
-    entries,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge:true }).catch(err => console.error(err));
+  };
+  patch["entries." + id] = { age, delivered:false, order: Date.now() };
+  db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
+    .catch(err => { console.error(err); alert("登録の保存に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
 }
 
 function removeEntry(id){
   if(!confirm("この対象者を削除しますか？")) return;
-  const entries = (currentData.entries || []).filter(e => e.id !== id);
-  db.collection(COLLECTION).doc(currentHanDocId()).set({ entries }, { merge:true }).catch(err=>console.error(err));
+  const patch = {};
+  patch["entries." + id] = firebase.firestore.FieldValue.delete();
+  db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
+    .catch(err => { console.error(err); alert("削除に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
   removeLocalInfo(id);
 }
 
 function toggleDelivered(id, value){
-  const entries = (currentData.entries || []).map(e => e.id===id ? {...e, delivered: value} : e);
-  db.collection(COLLECTION).doc(currentHanDocId()).set({ entries }, { merge:true }).catch(err=>console.error(err));
+  const patch = {};
+  patch["entries." + id + ".delivered"] = value;
+  db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
+    .catch(err => { console.error(err); alert("更新に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
 }
 
 function confirmHan(){
@@ -695,7 +731,7 @@ function confirmHan(){
   db.collection(COLLECTION).doc(currentHanDocId()).set({
     status: "confirmed",
     confirmedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge:true }).catch(err=>console.error(err));
+  }, { merge:true }).catch(err=>{ console.error(err); alert("確定の保存に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
 }
 
 /* ---------- 氏名・住所（この端末のlocalStorageのみ） ---------- */
@@ -756,7 +792,7 @@ function saveNameModal(){
 }
 
 function exportLocalInfo(){
-  const entries = currentData.entries || [];
+  const entries = entriesArray(currentData);
   const all = getAllLocalInfo();
   let text = hanLabel(currentBranch, currentGroup) + "　敬老祝い品 対象者控え\n\n";
   entries.forEach((e, idx) => {
@@ -781,10 +817,14 @@ function escapeHtml(s){
 /* ---------- 本部画面 ---------- */
 function watchAdmin(){
   unsubscribe = db.collection(COLLECTION).onSnapshot(snap => {
+    hideConnError();
     const byHan = {};
     snap.forEach(doc => { byHan[doc.id] = doc.data(); });
     renderAdmin(byHan);
-  }, err => console.error(err));
+  }, err => {
+    console.error(err);
+    showConnError("一覧の読み込みに失敗しました。通信状況をご確認ください。");
+  });
 }
 
 function renderAdmin(byHan){
@@ -795,7 +835,7 @@ function renderAdmin(byHan){
     for(let g=1; g<=branch.groups; g++){
       const docId = hanDocId(branch.id, g);
       const data = byHan[docId];
-      const entries = (data && data.entries) || [];
+      const entries = entriesArray(data);
       const status = data ? (data.status || "draft") : "none";
       const c80 = entries.filter(e=>e.age===80).length;
       const c90 = entries.filter(e=>e.age===90).length;
@@ -828,7 +868,8 @@ function renderAdmin(byHan){
 
 function unlockHan(docId){
   if(!confirm("この班の確定を解除し、再編集できるようにしますか？")) return;
-  db.collection(COLLECTION).doc(docId).set({ status: "draft" }, { merge:true }).catch(err=>console.error(err));
+  db.collection(COLLECTION).doc(docId).set({ status: "draft" }, { merge:true })
+    .catch(err=>{ console.error(err); alert("解除に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
 }
 </script>
 </body>
