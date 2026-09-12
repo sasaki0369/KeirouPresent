@@ -736,6 +736,10 @@ function addEntry(age){
   currentData.status = currentData.status || "draft";
   renderHan();
 
+  // 追加直後に、そのままお名前・ご住所の登録画面を開く
+  const displayNo = entriesArray(currentData).length;
+  openNameModal(id, displayNo);
+
   const patch = {
     status: currentData.status,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -825,7 +829,7 @@ function clearOneLocalInfo(entryId){
 }
 
 function clearDeliveredLocalInfo(){
-  const entries = currentData.entries || [];
+  const entries = entriesArray(currentData);
   const deliveredIds = entries.filter(e => e.delivered).map(e => e.id);
   if(deliveredIds.length === 0){ alert("配布済みの対象者がまだいません。"); return; }
   if(!confirm(`配布済みの${deliveredIds.length}件のお名前・ご住所をこの端末から削除します。削除すると元に戻せません。よろしいですか？`)) return;
