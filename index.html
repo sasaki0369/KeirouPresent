@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>敬老の日 祝い品 対象者登録</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg: #FBF6EE;
+    --card: #FFFFFF;
+    --ink: #2B2620;
+    --muted: #8A7C64;
+    --line: #E1D3B8;
+    --accent: #9B3922;      /* 柿色（アクセント） */
+    --accent-deep: #7A2C19;
+    --gold: #B8863B;        /* 金茶（80/90/100の区分） */
+    --sage: #5B6B4F;        /* 完了・配布済みの色 */
+    --danger: #A23B3B;
+    --radius: 4px;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'BIZ UDPGothic', sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,h3, .serif{
+    font-family: 'Zen Old Mincho', serif;
+    font-weight: 700;
+    letter-spacing: .02em;
+  }
+  .app{
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 0 0 48px;
+  }
+  header.top{
+    padding: 28px 20px 20px;
+    border-bottom: 1px solid var(--line);
+    display:flex;
+    align-items:baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  header.top .mark{
+    font-size: 13px;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  header.top h1{
+    font-size: 22px;
+    margin: 4px 0 0;
+    color: var(--accent-deep);
+  }
+  .sub{
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 2px;
+  }
+  main{ padding: 20px; }
+  section{ margin-bottom: 32px; }
+  section > h2{
+    font-size: 16px;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: 700;
+    border-left: 3px solid var(--gold);
+    padding-left: 10px;
+  }
+
+  /* --- ログイン画面 --- */
+  .login-card{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .role-tabs{
+    display:flex;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow:hidden;
+    margin-bottom: 20px;
+  }
+  .role-tabs button{
+    flex:1;
+    padding: 14px 0;
+    border:none;
+    background: var(--card);
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 15px;
+    cursor:pointer;
+  }
+  .role-tabs button.active{
+    background: var(--accent);
+    color: #fff;
+  }
+  label{
+    display:block;
+    font-size: 14px;
+    color: var(--muted);
+    margin: 16px 0 6px;
+  }
+  select, input[type=password], input[type=text]{
+    width:100%;
+    padding: 14px 12px;
+    font-size: 17px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .btn{
+    display:block;
+    width:100%;
+    text-align:center;
+    padding: 15px 0;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 16px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-primary{ background: var(--accent); color:#fff; margin-top: 22px;}
+  .btn-primary:active{ background: var(--accent-deep); }
+  .btn-outline{ background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  .btn-quiet{ background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .btn-sage{ background: var(--sage); color: #fff; }
+  .error-msg{ color: var(--danger); font-size: 14px; margin-top: 10px; display:none; }
+
+  /* --- 班長画面：対象者カード --- */
+  .age-groups{ display:flex; gap:8px; margin-bottom: 16px; }
+  .age-groups .pill{
+    flex:1;
+    text-align:center;
+    padding: 10px 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+  }
+  .age-groups .pill b{ font-family:'Zen Old Mincho',serif; font-size:20px; display:block; color: var(--accent-deep);}
+  .age-groups .pill span{ font-size: 12px; color: var(--muted); }
+
+  .entry{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--gold);
+    border-radius: var(--radius);
+    padding: 14px 14px;
+    margin-bottom: 10px;
+  }
+  .entry.delivered{ border-left-color: var(--sage); background: #F6F8F4; }
+  .entry-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .entry-title{ font-weight: 700; font-size: 15px; }
+  .entry-age{ font-size: 13px; color: var(--muted); }
+  .entry-name{ font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .entry-actions{ display:flex; gap: 8px; align-items:center; }
+  .icon-btn{
+    border:none; background: transparent; color: var(--muted);
+    font-size: 13px; text-decoration: underline; cursor:pointer; padding: 4px;
+    font-family: inherit;
+  }
+  .check-btn{
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--muted);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  .check-btn.on{ background: var(--sage); color:#fff; border-color: var(--sage);}
+
+  .add-row{ display:flex; gap:8px; margin-top: 14px; }
+  .add-row button{
+    flex:1;
+    padding: 14px 0;
+    border: 1px dashed var(--accent);
+    background: #fff;
+    color: var(--accent);
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .status-banner{
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+  .status-banner.draft{ background: #FBF0DE; color: var(--gold); border: 1px solid var(--gold); }
+  .status-banner.confirmed{ background: #EDF1E9; color: var(--sage); border: 1px solid var(--sage); }
+
+  .empty{
+    text-align:center;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 24px 0;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+  }
+
+  /* --- モーダル --- */
+  .modal-back{
+    position: fixed; inset:0; background: rgba(43,38,32,.45);
+    display:none; align-items:flex-end; justify-content:center; z-index: 50;
+  }
+  .modal-back.show{ display:flex; }
+  .modal{
+    background:#fff; width:100%; max-width:480px;
+    border-radius: 14px 14px 0 0;
+    padding: 22px 20px 28px;
+  }
+  .modal h3{ margin:0 0 4px; font-size:18px; }
+  .modal .hint{ font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .modal-actions{ display:flex; gap: 10px; margin-top: 18px; }
+  .modal-actions .btn{ margin-top:0; }
+
+  /* --- 本部画面 --- */
+  table.admin-table{
+    width:100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background:#fff;
+  }
+  table.admin-table th, table.admin-table td{
+    border-bottom: 1px solid var(--line);
+    padding: 10px 6px;
+    text-align: center;
+  }
+  table.admin-table th{ color: var(--muted); font-weight: 700; }
+  table.admin-table td.han-no{ text-align:left; font-weight:700; }
+  .tag{ font-size: 12px; padding: 3px 8px; border-radius: 999px; }
+  .tag.draft{ background:#FBF0DE; color:var(--gold); }
+  .tag.confirmed{ background:#EDF1E9; color:var(--sage); }
+  .tag.none{ background:#F2ECE0; color: var(--muted); }
+  .totals{
+    display:flex; gap:10px; margin-bottom:18px;
+  }
+  .totals .box{
+    flex:1; background:#fff; border:1px solid var(--line); border-radius: var(--radius);
+    text-align:center; padding: 14px 0;
+  }
+  .totals .box b{ font-family:'Zen Old Mincho',serif; font-size:26px; display:block; color:var(--accent-deep);}
+  .totals .box span{ font-size:12px; color:var(--muted); }
+  .unlock-btn{ font-size:12px; color: var(--accent); background:none; border:none; text-decoration:underline; cursor:pointer; font-family: inherit;}
+
+  footer.app-footer{
+    text-align:center; padding: 30px 20px 10px;
+  }
+  footer.app-footer button{
+    background:none; border:none; color: var(--muted); font-size: 13px; text-decoration: underline; cursor:pointer; font-family: inherit;
+  }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ===================== ログイン画面 ===================== -->
+  <div id="loginScreen">
+    <header class="top">
+      <div>
+        <div class="mark">敬老の日</div>
+        <h1>祝い品 対象者登録</h1>
+        <div class="sub">80歳・90歳・100歳の対象者を班ごとに登録します</div>
+      </div>
+    </header>
+    <main>
+      <div class="login-card">
+        <div class="role-tabs">
+          <button id="tabHan" class="active" onclick="setRole('han')">班長として入る</button>
+          <button id="tabAdmin" onclick="setRole('admin')">本部として入る</button>
+        </div>
+
+        <div id="hanLoginFields">
+          <label for="hanSelect">班番号</label>
+          <select id="hanSelect"></select>
+          <label for="hanPinInput">共通PIN</label>
+          <input type="password" id="hanPinInput" inputmode="numeric" placeholder="回覧板でお知らせしたPIN">
+        </div>
+
+        <div id="adminLoginFields" class="hidden">
+          <label for="adminPinInput">本部PIN</label>
+          <input type="password" id="adminPinInput" inputmode="numeric" placeholder="本部用PIN">
+        </div>
+
+        <button class="btn btn-primary" onclick="login()">入る</button>
+        <div class="error-msg" id="loginError">PINが違います。回覧板をご確認ください。</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===================== 班長画面 ===================== -->
+  <div id="hanScreen" class="hidden">
+    <header class="top">
+      <div>
+        <div class="mark">班長画面</div>
+        <h1 id="hanTitle">第◯班</h1>
+        <div class="sub">対象者を登録し、届いたら「配布済み」を押してください</div>
+      </div>
+    </header>
+    <main>
+      <div id="hanStatusBanner"></div>
+
+      <section>
+        <h2>対象者の内訳</h2>
+        <div class="age-groups">
+          <div class="pill"><b id="count80">0</b><span>80歳</span></div>
+          <div class="pill"><b id="count90">0</b><span>90歳</span></div>
+          <div class="pill"><b id="count100">0</b><span>100歳</span></div>
+        </div>
+
+        <div id="entryList"></div>
+        <div id="entryEmpty" class="empty hidden">まだ対象者が登録されていません。<br>下のボタンから追加してください。</div>
+
+        <div class="add-row" id="addRow">
+          <button onclick="addEntry(80)">＋ 80歳を追加</button>
+          <button onclick="addEntry(90)">＋ 90歳を追加</button>
+          <button onclick="addEntry(100)">＋ 100歳を追加</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>登録の確定</h2>
+        <p class="sub" style="margin-bottom:14px;">確定すると本部に人数が伝わり、プレゼントの準備が始まります。確定後に人数を直す場合は本部にご連絡ください。</p>
+        <button class="btn btn-primary" id="confirmBtn" onclick="confirmHan()">この内容で確定する</button>
+      </section>
+
+      <section>
+        <h2>お名前・ご住所の控え（この端末だけに保存）</h2>
+        <p class="sub" style="margin-bottom:14px;">お名前やご住所は本部には送信されません。この端末の中だけに保存され、班長さまの手元の控えとしてお使いいただけます。</p>
+        <button class="btn btn-outline" onclick="exportLocalInfo()">控えをテキストでコピーする</button>
+      </section>
+    </main>
+    <footer class="app-footer"><button onclick="logout()">ログアウト</button></footer>
+  </div>
+
+  <!-- ===================== 本部画面 ===================== -->
+  <div id="adminScreen" class="hidden">
+    <header class="top">
+      <div>
+        <div class="mark">本部画面</div>
+        <h1>全班の状況</h1>
+        <div class="sub">70班分の登録・確定・配布の状況を一覧できます</div>
+      </div>
+    </header>
+    <main>
+      <section>
+        <h2>合計人数（確定分のみ）</h2>
+        <div class="totals">
+          <div class="box"><b id="total80">0</b><span>80歳</span></div>
+          <div class="box"><b id="total90">0</b><span>90歳</span></div>
+          <div class="box"><b id="total100">0</b><span>100歳</span></div>
+        </div>
+      </section>
+      <section>
+        <h2>班ごとの状況</h2>
+        <table class="admin-table">
+          <thead>
+            <tr><th style="text-align:left;">班</th><th>状態</th><th>80</th><th>90</th><th>100</th><th>配布</th></tr>
+          </thead>
+          <tbody id="adminTableBody"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>PIN設定</h2>
+        <p class="sub" style="margin-bottom:14px;">班長用の共通PINと、本部用PINをここで変更できます。変更後は新しいPINを回覧板等でお知らせください。</p>
+        <label for="settingsHanPin">班長用 共通PIN</label>
+        <input type="text" id="settingsHanPin" inputmode="numeric">
+        <label for="settingsAdminPin">本部用PIN</label>
+        <input type="text" id="settingsAdminPin" inputmode="numeric">
+        <button class="btn btn-sage" style="margin-top:16px;" onclick="saveSettings()">PINを更新する</button>
+      </section>
+    </main>
+    <footer class="app-footer"><button onclick="logout()">ログアウト</button></footer>
+  </div>
+
+</div>
+
+<!-- ===================== 氏名・住所 入力モーダル ===================== -->
+<div class="modal-back" id="nameModalBack">
+  <div class="modal">
+    <h3 id="nameModalTitle">対象者の控え</h3>
+    <div class="hint">この端末にだけ保存されます。本部には送られません。</div>
+    <label for="nameInput">お名前</label>
+    <input type="text" id="nameInput" placeholder="例：山田 太郎">
+    <label for="addressInput">ご住所</label>
+    <input type="text" id="addressInput" placeholder="例：〇〇町3-4-5">
+    <div class="modal-actions">
+      <button class="btn btn-quiet" onclick="closeNameModal()">閉じる</button>
+      <button class="btn btn-primary" onclick="saveNameModal()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase (compat SDK) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* =========================================================
+   設定
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyCMejR5JNZ9YE1-NFnRa1HGVzZXm4DZGl0",
+  authDomain: "ogawa-enquete.firebaseapp.com",
+  databaseURL: "https://ogawa-enquete-default-rtdb.firebaseio.com",
+  projectId: "ogawa-enquete",
+  storageBucket: "ogawa-enquete.firebasestorage.app",
+  messagingSenderId: "849455476783",
+  appId: "1:849455476783:web:613e3d97bc5c54f77e56da"
+};
+
+// 初回起動時のPIN初期値。以降は本部画面からいつでも変更できます（Firestoreの_settingsに保存）。
+const DEFAULT_HAN_PIN = "1234";
+const DEFAULT_ADMIN_PIN = "9876";
+const TOTAL_HAN = 70;
+const COLLECTION = "keirouGifts2026"; // 年ごとに変えたい場合はここを変更（例: keirouGifts2027）
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let currentRole = "han";   // "han" | "admin"
+let currentHan = null;     // 班番号（文字列）
+let currentData = { status: "draft", entries: [] };
+let currentSettings = { hanPin: DEFAULT_HAN_PIN, adminPin: DEFAULT_ADMIN_PIN };
+let unsubscribe = null;
+let unsubscribeSettings = null;
+
+/* ---------- PIN設定（Firestoreの _settings ドキュメントで一元管理） ---------- */
+function watchSettings(){
+  unsubscribeSettings = db.collection(COLLECTION).doc("_settings").onSnapshot(snap => {
+    if(snap.exists){
+      const data = snap.data();
+      currentSettings = {
+        hanPin: data.hanPin || DEFAULT_HAN_PIN,
+        adminPin: data.adminPin || DEFAULT_ADMIN_PIN
+      };
+    } else {
+      currentSettings = { hanPin: DEFAULT_HAN_PIN, adminPin: DEFAULT_ADMIN_PIN };
+    }
+    // 本部画面が開いていれば入力欄にも反映（編集中でなければ）
+    const hanPinField = document.getElementById("settingsHanPin");
+    const adminPinField = document.getElementById("settingsAdminPin");
+    if(hanPinField && document.activeElement !== hanPinField) hanPinField.value = currentSettings.hanPin;
+    if(adminPinField && document.activeElement !== adminPinField) adminPinField.value = currentSettings.adminPin;
+  }, err => console.error(err));
+}
+watchSettings(); // ログイン画面でもPIN照合に使うため常時購読
+
+function saveSettings(){
+  const hanPin = document.getElementById("settingsHanPin").value.trim();
+  const adminPin = document.getElementById("settingsAdminPin").value.trim();
+  if(!hanPin || !adminPin){ alert("PINを入力してください。"); return; }
+  db.collection(COLLECTION).doc("_settings").set({ hanPin, adminPin }, { merge:true })
+    .then(()=> alert("PINを更新しました。次回ログインから新しいPINが使われます。"))
+    .catch(err => { console.error(err); alert("更新に失敗しました。通信をご確認ください。"); });
+}
+
+/* ---------- 初期化 ---------- */
+(function initHanSelect(){
+  const sel = document.getElementById("hanSelect");
+  for(let i=1;i<=TOTAL_HAN;i++){
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = "第" + i + "班";
+    sel.appendChild(opt);
+  }
+})();
+
+// 直前のセッションを復元
+(function restoreSession(){
+  const saved = JSON.parse(sessionStorage.getItem("keirouSession") || "null");
+  if(saved && saved.role === "han"){
+    currentRole = "han"; currentHan = saved.han;
+    showScreen("han"); watchHan(currentHan);
+  } else if(saved && saved.role === "admin"){
+    currentRole = "admin";
+    showScreen("admin"); watchAdmin();
+  }
+})();
+
+/* ---------- ログイン ---------- */
+function setRole(role){
+  currentRole = role;
+  document.getElementById("tabHan").classList.toggle("active", role==="han");
+  document.getElementById("tabAdmin").classList.toggle("active", role==="admin");
+  document.getElementById("hanLoginFields").classList.toggle("hidden", role!=="han");
+  document.getElementById("adminLoginFields").classList.toggle("hidden", role!=="admin");
+  document.getElementById("loginError").style.display = "none";
+}
+
+function login(){
+  const errEl = document.getElementById("loginError");
+  if(currentRole === "han"){
+    const han = document.getElementById("hanSelect").value;
+    const pin = document.getElementById("hanPinInput").value.trim();
+    if(pin !== currentSettings.hanPin){ errEl.style.display="block"; return; }
+    currentHan = han;
+    sessionStorage.setItem("keirouSession", JSON.stringify({role:"han", han}));
+    showScreen("han");
+    watchHan(han);
+  } else {
+    const pin = document.getElementById("adminPinInput").value.trim();
+    if(pin !== currentSettings.adminPin){ errEl.style.display="block"; return; }
+    sessionStorage.setItem("keirouSession", JSON.stringify({role:"admin"}));
+    showScreen("admin");
+    watchAdmin();
+  }
+}
+
+function logout(){
+  if(unsubscribe){ unsubscribe(); unsubscribe = null; }
+  sessionStorage.removeItem("keirouSession");
+  showScreen("login");
+}
+
+function showScreen(name){
+  document.getElementById("loginScreen").classList.toggle("hidden", name!=="login");
+  document.getElementById("hanScreen").classList.toggle("hidden", name!=="han");
+  document.getElementById("adminScreen").classList.toggle("hidden", name!=="admin");
+}
+
+/* ---------- 班長画面：Firestore購読 ---------- */
+function watchHan(han){
+  document.getElementById("hanTitle").textContent = "第" + han + "班";
+  const ref = db.collection(COLLECTION).doc(han);
+  unsubscribe = ref.onSnapshot(snap => {
+    currentData = snap.exists ? snap.data() : { status: "draft", entries: [] };
+    renderHan();
+  }, err => {
+    console.error(err);
+  });
+}
+
+function renderHan(){
+  const entries = currentData.entries || [];
+  const status = currentData.status || "draft";
+
+  // 内訳
+  document.getElementById("count80").textContent = entries.filter(e=>e.age===80).length;
+  document.getElementById("count90").textContent = entries.filter(e=>e.age===90).length;
+  document.getElementById("count100").textContent = entries.filter(e=>e.age===100).length;
+
+  // ステータスバナー
+  const banner = document.getElementById("hanStatusBanner");
+  if(status === "confirmed"){
+    banner.innerHTML = `<div class="status-banner confirmed">確定済みです。人数の変更が必要な場合は本部にご連絡ください。</div>`;
+  } else {
+    banner.innerHTML = `<div class="status-banner draft">まだ確定していません。登録が終わったら「確定する」を押してください。</div>`;
+  }
+
+  // 追加ボタン・確定ボタンの制御
+  const locked = status === "confirmed";
+  document.getElementById("addRow").style.opacity = locked ? .4 : 1;
+  document.getElementById("addRow").style.pointerEvents = locked ? "none" : "auto";
+  const confirmBtn = document.getElementById("confirmBtn");
+  confirmBtn.textContent = locked ? "確定済みです" : "この内容で確定する";
+  confirmBtn.disabled = locked;
+  confirmBtn.style.opacity = locked ? .5 : 1;
+
+  // 一覧
+  const listEl = document.getElementById("entryList");
+  const emptyEl = document.getElementById("entryEmpty");
+  listEl.innerHTML = "";
+  if(entries.length === 0){
+    emptyEl.classList.remove("hidden");
+  } else {
+    emptyEl.classList.add("hidden");
+    entries.forEach((e, idx) => {
+      const local = getLocalInfo(e.id);
+      const div = document.createElement("div");
+      div.className = "entry" + (e.delivered ? " delivered" : "");
+      div.innerHTML = `
+        <div class="entry-row">
+          <div>
+            <div class="entry-title">対象者${idx+1} <span class="entry-age">・${e.age}歳</span></div>
+            ${local && local.name ? `<div class="entry-name">${escapeHtml(local.name)}${local.address ? "　"+escapeHtml(local.address) : ""}</div>` : `<div class="entry-name">お名前未登録</div>`}
+          </div>
+          <div class="entry-actions">
+            <button class="check-btn ${e.delivered ? "on" : ""}" onclick="toggleDelivered('${e.id}', ${!e.delivered})">${e.delivered ? "配布済み" : "配布済みにする"}</button>
+          </div>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:14px;">
+          <button class="icon-btn" onclick="openNameModal('${e.id}', ${idx+1})">お名前・住所を編集</button>
+          ${locked ? "" : `<button class="icon-btn" onclick="removeEntry('${e.id}')" style="color:var(--danger);">この対象者を削除</button>`}
+        </div>
+      `;
+      listEl.appendChild(div);
+    });
+  }
+}
+
+function addEntry(age){
+  const id = "e" + Date.now() + Math.floor(Math.random()*1000);
+  const entries = (currentData.entries || []).concat([{ id, age, delivered:false }]);
+  // fire-and-forget：書き込み完了を待たずに進める
+  db.collection(COLLECTION).doc(currentHan).set({
+    status: currentData.status || "draft",
+    entries,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true }).catch(err => console.error(err));
+}
+
+function removeEntry(id){
+  if(!confirm("この対象者を削除しますか？")) return;
+  const entries = (currentData.entries || []).filter(e => e.id !== id);
+  db.collection(COLLECTION).doc(currentHan).set({ entries }, { merge:true }).catch(err=>console.error(err));
+  removeLocalInfo(id);
+}
+
+function toggleDelivered(id, value){
+  const entries = (currentData.entries || []).map(e => e.id===id ? {...e, delivered: value} : e);
+  db.collection(COLLECTION).doc(currentHan).set({ entries }, { merge:true }).catch(err=>console.error(err));
+}
+
+function confirmHan(){
+  if(!confirm("この内容で確定します。よろしいですか？")) return;
+  db.collection(COLLECTION).doc(currentHan).set({
+    status: "confirmed",
+    confirmedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true }).catch(err=>console.error(err));
+}
+
+/* ---------- 氏名・住所（この端末のlocalStorageのみ） ---------- */
+function localKey(){ return "keirouLocal_" + currentHan; }
+
+function getAllLocalInfo(){
+  return JSON.parse(localStorage.getItem(localKey()) || "{}");
+}
+function getLocalInfo(entryId){
+  return getAllLocalInfo()[entryId] || null;
+}
+function setLocalInfo(entryId, data){
+  const all = getAllLocalInfo();
+  all[entryId] = data;
+  localStorage.setItem(localKey(), JSON.stringify(all));
+}
+function removeLocalInfo(entryId){
+  const all = getAllLocalInfo();
+  delete all[entryId];
+  localStorage.setItem(localKey(), JSON.stringify(all));
+}
+
+let editingEntryId = null;
+function openNameModal(entryId, displayNo){
+  editingEntryId = entryId;
+  const info = getLocalInfo(entryId) || {name:"", address:""};
+  document.getElementById("nameModalTitle").textContent = "対象者" + displayNo + "の控え";
+  document.getElementById("nameInput").value = info.name || "";
+  document.getElementById("addressInput").value = info.address || "";
+  document.getElementById("nameModalBack").classList.add("show");
+}
+function closeNameModal(){
+  document.getElementById("nameModalBack").classList.remove("show");
+  editingEntryId = null;
+}
+function saveNameModal(){
+  const name = document.getElementById("nameInput").value.trim();
+  const address = document.getElementById("addressInput").value.trim();
+  setLocalInfo(editingEntryId, { name, address });
+  closeNameModal();
+  renderHan();
+}
+
+function exportLocalInfo(){
+  const entries = currentData.entries || [];
+  const all = getAllLocalInfo();
+  let text = "第" + currentHan + "班　敬老祝い品 対象者控え\n\n";
+  entries.forEach((e, idx) => {
+    const info = all[e.id] || {};
+    text += `${idx+1}. ${e.age}歳　${info.name || "（未登録）"}　${info.address || ""}${e.delivered ? "　配布済み" : ""}\n`;
+  });
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>{
+      alert("控えをコピーしました。メモ帳などに貼り付けて保存してください。");
+    }).catch(()=>{
+      prompt("以下をコピーしてください：", text);
+    });
+  } else {
+    prompt("以下をコピーしてください：", text);
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+/* ---------- 本部画面 ---------- */
+function watchAdmin(){
+  unsubscribe = db.collection(COLLECTION).onSnapshot(snap => {
+    const byHan = {};
+    snap.forEach(doc => { byHan[doc.id] = doc.data(); });
+    renderAdmin(byHan);
+  }, err => console.error(err));
+}
+
+function renderAdmin(byHan){
+  let t80=0, t90=0, t100=0;
+  const rows = [];
+  for(let i=1;i<=TOTAL_HAN;i++){
+    const han = String(i);
+    const data = byHan[han];
+    const entries = (data && data.entries) || [];
+    const status = data ? (data.status || "draft") : "none";
+    const c80 = entries.filter(e=>e.age===80).length;
+    const c90 = entries.filter(e=>e.age===90).length;
+    const c100 = entries.filter(e=>e.age===100).length;
+    const delivered = entries.filter(e=>e.delivered).length;
+    if(status === "confirmed"){ t80+=c80; t90+=c90; t100+=c100; }
+
+    const tagClass = status === "confirmed" ? "confirmed" : (status === "draft" && entries.length>0 ? "draft" : "none");
+    const tagLabel = status === "confirmed" ? "確定済み" : (entries.length>0 ? "入力中" : "未入力");
+
+    rows.push(`
+      <tr>
+        <td class="han-no">第${i}班</td>
+        <td><span class="tag ${tagClass}">${tagLabel}</span>
+          ${status==="confirmed" ? `<div><button class="unlock-btn" onclick="unlockHan('${han}')">確定を解除</button></div>` : ""}
+        </td>
+        <td>${c80}</td>
+        <td>${c90}</td>
+        <td>${c100}</td>
+        <td>${entries.length ? delivered + "/" + entries.length : "-"}</td>
+      </tr>
+    `);
+  }
+  document.getElementById("total80").textContent = t80;
+  document.getElementById("total90").textContent = t90;
+  document.getElementById("total100").textContent = t100;
+  document.getElementById("adminTableBody").innerHTML = rows.join("");
+}
+
+function unlockHan(han){
+  if(!confirm("第" + han + "班の確定を解除し、再編集できるようにしますか？")) return;
+  db.collection(COLLECTION).doc(han).set({ status: "draft" }, { merge:true }).catch(err=>console.error(err));
+}
+</script>
+</body>
+</html>
