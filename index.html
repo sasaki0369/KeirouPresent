@@ -302,7 +302,10 @@
     </header>
     <main>
       <div class="login-card">
-        <div class="role-tabs">
+        <label for="yearSelect">年度</label>
+        <select id="yearSelect"></select>
+
+        <div class="role-tabs" style="margin-top:16px;">
           <button id="tabHan" class="active" onclick="setRole('han')">班長として入る</button>
           <button id="tabAdmin" onclick="setRole('admin')">本部として入る</button>
         </div>
@@ -386,7 +389,7 @@
       <div>
         <div class="mark">本部画面</div>
         <h1>全班の状況</h1>
-        <div class="sub">全班の登録・確定・配布の状況を一覧できます</div>
+        <div class="sub" id="adminYearLabel">全班の登録・確定・配布の状況を一覧できます</div>
       </div>
     </header>
     <main>
@@ -438,6 +441,12 @@
         <label for="settingsAdminPin">本部用PIN</label>
         <input type="text" id="settingsAdminPin" inputmode="numeric">
         <button class="btn btn-sage" style="margin-top:16px;" onclick="saveSettings()">PINを更新する</button>
+      </section>
+
+      <section>
+        <h2 style="color:var(--danger); border-left-color:var(--danger);">この年度の全体リセット</h2>
+        <p class="sub" style="margin-bottom:14px;">この年度（<span id="resetYearLabel"></span>）の、すべての班の登録・確定・配布状況を一括で削除します。班ごとのリセットと違い、全班が対象になります。誤って押した場合、元に戻すことはできません。</p>
+        <button class="btn btn-quiet" style="color:var(--danger); border-color:var(--danger);" onclick="resetAllHans()">全班のデータを一括リセットする</button>
       </section>
     </main>
     <footer class="app-footer"><button onclick="logout()">ログアウト</button></footer>
@@ -496,7 +505,12 @@ const firebaseConfig = {
 // 初回起動時のPIN初期値。以降は本部画面からいつでも変更できます（Firestoreの_settingsに保存）。
 const DEFAULT_HAN_PIN = "1234";
 const DEFAULT_ADMIN_PIN = "9876";
-const COLLECTION = "keirouGifts2026"; // 年ごとに変えたい場合はここを変更（例: keirouGifts2027）
+// データは年度ごとに別のコレクションで管理する（例: keirouGifts2026, keirouGifts2027）
+// PIN設定は年度に関係なく共通のコレクションで管理する
+const SETTINGS_COLLECTION = "keirouSettings";
+function collectionForYear(year){ return "keirouGifts" + year; }
+let COLLECTION = null;   // ログイン時に選択した年度に応じて決まる
+let currentYear = null;
 
 // 支部・班構成（役員会参加確認アプリと同一の11支部構成）
 const BRANCHES = [
@@ -564,7 +578,7 @@ function hideConnError(){
 
 /* ---------- PIN設定（Firestoreの _settings ドキュメントで一元管理） ---------- */
 function watchSettings(){
-  unsubscribeSettings = db.collection(COLLECTION).doc("_settings").onSnapshot(snap => {
+  unsubscribeSettings = db.collection(SETTINGS_COLLECTION).doc("main").onSnapshot(snap => {
     if(snap.exists){
       const data = snap.data();
       currentSettings = {
@@ -596,12 +610,24 @@ function saveSettings(){
   const hanPin = document.getElementById("settingsHanPin").value.trim();
   const adminPin = document.getElementById("settingsAdminPin").value.trim();
   if(!hanPin || !adminPin){ alert("PINを入力してください。"); return; }
-  db.collection(COLLECTION).doc("_settings").set({ hanPin, adminPin }, { merge:true })
+  db.collection(SETTINGS_COLLECTION).doc("main").set({ hanPin, adminPin }, { merge:true })
     .then(()=> alert("PINを更新しました。次回ログインから新しいPINが使われます。"))
     .catch(err => { console.error(err); alert("更新に失敗しました。通信をご確認ください。"); });
 }
 
 /* ---------- 初期化 ---------- */
+(function initYearSelect(){
+  const sel = document.getElementById("yearSelect");
+  const current = new Date().getFullYear();
+  for(let y = current - 1; y <= current + 2; y++){
+    const opt = document.createElement("option");
+    opt.value = String(y);
+    opt.textContent = y + "年度";
+    if(y === current) opt.selected = true;
+    sel.appendChild(opt);
+  }
+})();
+
 (function initBranchSelect(){
   const sel = document.getElementById("branchSelect");
   BRANCHES.forEach(b => {
@@ -629,11 +655,16 @@ function onBranchChange(){
 // 直前のセッションを復元
 (function restoreSession(){
   const saved = JSON.parse(sessionStorage.getItem("keirouSession") || "null");
-  if(saved && saved.role === "han"){
+  if(!saved) return;
+  currentYear = saved.year;
+  COLLECTION = collectionForYear(currentYear);
+  if(saved.role === "han"){
     currentRole = "han"; currentBranch = saved.branch; currentGroup = saved.group;
     showScreen("han"); watchHan(currentBranch, currentGroup);
-  } else if(saved && saved.role === "admin"){
+  } else if(saved.role === "admin"){
     currentRole = "admin";
+    document.getElementById("adminYearLabel").textContent = currentYear + "年度：全班の登録・確定・配布の状況を一覧できます";
+    document.getElementById("resetYearLabel").textContent = currentYear + "年度";
     showScreen("admin"); watchAdmin();
   }
 })();
@@ -656,19 +687,26 @@ function login(){
     return;
   }
   errEl.textContent = "PINが違います。LINE等でご確認ください。";
+  const year = document.getElementById("yearSelect").value;
   if(currentRole === "han"){
     const branchId = document.getElementById("branchSelect").value;
     const group = document.getElementById("groupSelect").value;
     const pin = document.getElementById("hanPinInput").value.trim();
     if(pin !== currentSettings.hanPin){ errEl.style.display="block"; return; }
+    currentYear = year;
+    COLLECTION = collectionForYear(year);
     currentBranch = branchId; currentGroup = group;
-    sessionStorage.setItem("keirouSession", JSON.stringify({role:"han", branch:branchId, group}));
+    sessionStorage.setItem("keirouSession", JSON.stringify({role:"han", year, branch:branchId, group}));
     showScreen("han");
     watchHan(branchId, group);
   } else {
     const pin = document.getElementById("adminPinInput").value.trim();
     if(pin !== currentSettings.adminPin){ errEl.style.display="block"; return; }
-    sessionStorage.setItem("keirouSession", JSON.stringify({role:"admin"}));
+    currentYear = year;
+    COLLECTION = collectionForYear(year);
+    sessionStorage.setItem("keirouSession", JSON.stringify({role:"admin", year}));
+    document.getElementById("adminYearLabel").textContent = currentYear + "年度：全班の登録・確定・配布の状況を一覧できます";
+    document.getElementById("resetYearLabel").textContent = currentYear + "年度";
     showScreen("admin");
     watchAdmin();
   }
@@ -689,7 +727,7 @@ function showScreen(name){
 
 /* ---------- 班長画面：Firestore購読 ---------- */
 function watchHan(branchId, group){
-  document.getElementById("hanTitle").textContent = hanLabel(branchId, group);
+  document.getElementById("hanTitle").textContent = currentYear + "年度　" + hanLabel(branchId, group);
   const docId = hanDocId(branchId, group);
   const ref = db.collection(COLLECTION).doc(docId);
   unsubscribe = ref.onSnapshot(snap => {
@@ -913,7 +951,7 @@ function resetHan(){
 
 /* ---------- 氏名・住所（この端末のlocalStorageのみ） ---------- */
 function currentHanDocId(){ return hanDocId(currentBranch, currentGroup); }
-function localKey(){ return "keirouLocal_" + currentHanDocId(); }
+function localKey(){ return "keirouLocal_" + currentYear + "_" + currentHanDocId(); }
 
 function getAllLocalInfo(){
   return JSON.parse(localStorage.getItem(localKey()) || "{}");
@@ -972,7 +1010,7 @@ function exportLocalInfo(){
   const entries = entriesArray(currentData);
   if(entries.length === 0){ alert("対象者が登録されていないため、控えはありません。"); return; }
   const all = getAllLocalInfo();
-  let text = hanLabel(currentBranch, currentGroup) + "　敬老祝い品 対象者控え\n\n";
+  let text = currentYear + "年度　" + hanLabel(currentBranch, currentGroup) + "　敬老祝い品 対象者控え\n\n";
   entries.forEach((e, idx) => {
     const info = all[e.id] || {};
     text += `${idx+1}. ${e.age}歳　${info.name || "（未登録）"}　${info.address || ""}${e.delivered ? "　配布済み" : ""}\n`;
@@ -1132,6 +1170,29 @@ function resetHanFromAdmin(docId){
     confirmedAt: firebase.firestore.FieldValue.delete()
   }, { merge:true })
     .catch(err => { console.error(err); alert("リセットに失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
+}
+
+function resetAllHans(){
+  if(!confirm(currentYear + "年度の、すべての班の登録・確定・配布状況を一括で削除します。この操作は元に戻せません。よろしいですか？")) return;
+  const typed = prompt('最終確認です。よろしければ「リセット」と入力してください。');
+  if(typed !== "リセット"){ alert("入力が一致しなかったため、キャンセルしました。"); return; }
+
+  const promises = [];
+  BRANCHES.forEach(branch => {
+    for(let g=1; g<=branch.groups; g++){
+      const docId = hanDocId(branch.id, g);
+      promises.push(
+        db.collection(COLLECTION).doc(docId).set({
+          status: "draft",
+          entries: {},
+          confirmedAt: firebase.firestore.FieldValue.delete()
+        }, { merge:true })
+      );
+    }
+  });
+  Promise.all(promises)
+    .then(()=> alert(currentYear + "年度の全班のデータをリセットしました。"))
+    .catch(err => { console.error(err); alert("一部の班でリセットに失敗した可能性があります。通信状況をご確認のうえ、班一覧で確認してください。"); });
 }
 
 function unlockHan(docId){
