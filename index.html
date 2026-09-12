@@ -299,8 +299,10 @@
         </div>
 
         <div id="hanLoginFields">
-          <label for="hanSelect">班番号</label>
-          <select id="hanSelect"></select>
+          <label for="branchSelect">支部</label>
+          <select id="branchSelect" onchange="onBranchChange()"></select>
+          <label for="groupSelect">班</label>
+          <select id="groupSelect"></select>
           <label for="hanPinInput">共通PIN</label>
           <input type="password" id="hanPinInput" inputmode="numeric" placeholder="回覧板でお知らせしたPIN">
         </div>
@@ -441,14 +443,35 @@ const firebaseConfig = {
 // 初回起動時のPIN初期値。以降は本部画面からいつでも変更できます（Firestoreの_settingsに保存）。
 const DEFAULT_HAN_PIN = "1234";
 const DEFAULT_ADMIN_PIN = "9876";
-const TOTAL_HAN = 70;
 const COLLECTION = "keirouGifts2026"; // 年ごとに変えたい場合はここを変更（例: keirouGifts2027）
+
+// 支部・班構成（役員会参加確認アプリと同一の11支部構成）
+const BRANCHES = [
+  { id:"shimo1", name:"下小川1支部", groups:4 },
+  { id:"shimo2", name:"下小川2支部", groups:4 },
+  { id:"shimo3", name:"下小川3支部", groups:5 },
+  { id:"sengn1", name:"せんげん1支部", groups:5 },
+  { id:"sengn2", name:"せんげん2支部", groups:5 },
+  { id:"hachi1", name:"蜂谷戸1支部", groups:6 },
+  { id:"hachi2", name:"蜂谷戸2支部", groups:4 },
+  { id:"yanagi1", name:"柳谷戸1支部", groups:4 },
+  { id:"yanagi2", name:"柳谷戸2支部", groups:3 },
+  { id:"yanagi3", name:"柳谷戸3支部", groups:5 },
+  { id:"kaede", name:"かえで支部", groups:4 },
+];
+function branchById(id){ return BRANCHES.find(b => b.id === id); }
+function hanDocId(branchId, groupNo){ return branchId + "_" + groupNo; }
+function hanLabel(branchId, groupNo){
+  const b = branchById(branchId);
+  return (b ? b.name : branchId) + " " + groupNo + "班";
+}
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 let currentRole = "han";   // "han" | "admin"
-let currentHan = null;     // 班番号（文字列）
+let currentBranch = null;  // 支部ID
+let currentGroup = null;   // 班番号（数値）
 let currentData = { status: "draft", entries: [] };
 let currentSettings = { hanPin: DEFAULT_HAN_PIN, adminPin: DEFAULT_ADMIN_PIN };
 let unsubscribe = null;
@@ -485,22 +508,36 @@ function saveSettings(){
 }
 
 /* ---------- 初期化 ---------- */
-(function initHanSelect(){
-  const sel = document.getElementById("hanSelect");
-  for(let i=1;i<=TOTAL_HAN;i++){
+(function initBranchSelect(){
+  const sel = document.getElementById("branchSelect");
+  BRANCHES.forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b.id;
+    opt.textContent = b.name;
+    sel.appendChild(opt);
+  });
+  onBranchChange();
+})();
+
+function onBranchChange(){
+  const branchId = document.getElementById("branchSelect").value;
+  const branch = branchById(branchId);
+  const groupSel = document.getElementById("groupSelect");
+  groupSel.innerHTML = "";
+  for(let i=1;i<=branch.groups;i++){
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = "第" + i + "班";
-    sel.appendChild(opt);
+    opt.textContent = i + "班";
+    groupSel.appendChild(opt);
   }
-})();
+}
 
 // 直前のセッションを復元
 (function restoreSession(){
   const saved = JSON.parse(sessionStorage.getItem("keirouSession") || "null");
   if(saved && saved.role === "han"){
-    currentRole = "han"; currentHan = saved.han;
-    showScreen("han"); watchHan(currentHan);
+    currentRole = "han"; currentBranch = saved.branch; currentGroup = saved.group;
+    showScreen("han"); watchHan(currentBranch, currentGroup);
   } else if(saved && saved.role === "admin"){
     currentRole = "admin";
     showScreen("admin"); watchAdmin();
@@ -520,13 +557,14 @@ function setRole(role){
 function login(){
   const errEl = document.getElementById("loginError");
   if(currentRole === "han"){
-    const han = document.getElementById("hanSelect").value;
+    const branchId = document.getElementById("branchSelect").value;
+    const group = document.getElementById("groupSelect").value;
     const pin = document.getElementById("hanPinInput").value.trim();
     if(pin !== currentSettings.hanPin){ errEl.style.display="block"; return; }
-    currentHan = han;
-    sessionStorage.setItem("keirouSession", JSON.stringify({role:"han", han}));
+    currentBranch = branchId; currentGroup = group;
+    sessionStorage.setItem("keirouSession", JSON.stringify({role:"han", branch:branchId, group}));
     showScreen("han");
-    watchHan(han);
+    watchHan(branchId, group);
   } else {
     const pin = document.getElementById("adminPinInput").value.trim();
     if(pin !== currentSettings.adminPin){ errEl.style.display="block"; return; }
@@ -549,9 +587,10 @@ function showScreen(name){
 }
 
 /* ---------- 班長画面：Firestore購読 ---------- */
-function watchHan(han){
-  document.getElementById("hanTitle").textContent = "第" + han + "班";
-  const ref = db.collection(COLLECTION).doc(han);
+function watchHan(branchId, group){
+  document.getElementById("hanTitle").textContent = hanLabel(branchId, group);
+  const docId = hanDocId(branchId, group);
+  const ref = db.collection(COLLECTION).doc(docId);
   unsubscribe = ref.onSnapshot(snap => {
     currentData = snap.exists ? snap.data() : { status: "draft", entries: [] };
     renderHan();
@@ -622,7 +661,7 @@ function addEntry(age){
   const id = "e" + Date.now() + Math.floor(Math.random()*1000);
   const entries = (currentData.entries || []).concat([{ id, age, delivered:false }]);
   // fire-and-forget：書き込み完了を待たずに進める
-  db.collection(COLLECTION).doc(currentHan).set({
+  db.collection(COLLECTION).doc(currentHanDocId()).set({
     status: currentData.status || "draft",
     entries,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -632,25 +671,26 @@ function addEntry(age){
 function removeEntry(id){
   if(!confirm("この対象者を削除しますか？")) return;
   const entries = (currentData.entries || []).filter(e => e.id !== id);
-  db.collection(COLLECTION).doc(currentHan).set({ entries }, { merge:true }).catch(err=>console.error(err));
+  db.collection(COLLECTION).doc(currentHanDocId()).set({ entries }, { merge:true }).catch(err=>console.error(err));
   removeLocalInfo(id);
 }
 
 function toggleDelivered(id, value){
   const entries = (currentData.entries || []).map(e => e.id===id ? {...e, delivered: value} : e);
-  db.collection(COLLECTION).doc(currentHan).set({ entries }, { merge:true }).catch(err=>console.error(err));
+  db.collection(COLLECTION).doc(currentHanDocId()).set({ entries }, { merge:true }).catch(err=>console.error(err));
 }
 
 function confirmHan(){
   if(!confirm("この内容で確定します。よろしいですか？")) return;
-  db.collection(COLLECTION).doc(currentHan).set({
+  db.collection(COLLECTION).doc(currentHanDocId()).set({
     status: "confirmed",
     confirmedAt: firebase.firestore.FieldValue.serverTimestamp()
   }, { merge:true }).catch(err=>console.error(err));
 }
 
 /* ---------- 氏名・住所（この端末のlocalStorageのみ） ---------- */
-function localKey(){ return "keirouLocal_" + currentHan; }
+function currentHanDocId(){ return hanDocId(currentBranch, currentGroup); }
+function localKey(){ return "keirouLocal_" + currentHanDocId(); }
 
 function getAllLocalInfo(){
   return JSON.parse(localStorage.getItem(localKey()) || "{}");
@@ -693,7 +733,7 @@ function saveNameModal(){
 function exportLocalInfo(){
   const entries = currentData.entries || [];
   const all = getAllLocalInfo();
-  let text = "第" + currentHan + "班　敬老祝い品 対象者控え\n\n";
+  let text = hanLabel(currentBranch, currentGroup) + "　敬老祝い品 対象者控え\n\n";
   entries.forEach((e, idx) => {
     const info = all[e.id] || {};
     text += `${idx+1}. ${e.age}歳　${info.name || "（未登録）"}　${info.address || ""}${e.delivered ? "　配布済み" : ""}\n`;
@@ -725,42 +765,45 @@ function watchAdmin(){
 function renderAdmin(byHan){
   let t80=0, t90=0, t100=0;
   const rows = [];
-  for(let i=1;i<=TOTAL_HAN;i++){
-    const han = String(i);
-    const data = byHan[han];
-    const entries = (data && data.entries) || [];
-    const status = data ? (data.status || "draft") : "none";
-    const c80 = entries.filter(e=>e.age===80).length;
-    const c90 = entries.filter(e=>e.age===90).length;
-    const c100 = entries.filter(e=>e.age===100).length;
-    const delivered = entries.filter(e=>e.delivered).length;
-    if(status === "confirmed"){ t80+=c80; t90+=c90; t100+=c100; }
+  BRANCHES.forEach(branch => {
+    rows.push(`<tr><td colspan="6" style="text-align:left;background:#F2ECE0;font-weight:700;color:var(--accent-deep);">${branch.name}</td></tr>`);
+    for(let g=1; g<=branch.groups; g++){
+      const docId = hanDocId(branch.id, g);
+      const data = byHan[docId];
+      const entries = (data && data.entries) || [];
+      const status = data ? (data.status || "draft") : "none";
+      const c80 = entries.filter(e=>e.age===80).length;
+      const c90 = entries.filter(e=>e.age===90).length;
+      const c100 = entries.filter(e=>e.age===100).length;
+      const delivered = entries.filter(e=>e.delivered).length;
+      if(status === "confirmed"){ t80+=c80; t90+=c90; t100+=c100; }
 
-    const tagClass = status === "confirmed" ? "confirmed" : (status === "draft" && entries.length>0 ? "draft" : "none");
-    const tagLabel = status === "confirmed" ? "確定済み" : (entries.length>0 ? "入力中" : "未入力");
+      const tagClass = status === "confirmed" ? "confirmed" : (status === "draft" && entries.length>0 ? "draft" : "none");
+      const tagLabel = status === "confirmed" ? "確定済み" : (entries.length>0 ? "入力中" : "未入力");
 
-    rows.push(`
-      <tr>
-        <td class="han-no">第${i}班</td>
-        <td><span class="tag ${tagClass}">${tagLabel}</span>
-          ${status==="confirmed" ? `<div><button class="unlock-btn" onclick="unlockHan('${han}')">確定を解除</button></div>` : ""}
-        </td>
-        <td>${c80}</td>
-        <td>${c90}</td>
-        <td>${c100}</td>
-        <td>${entries.length ? delivered + "/" + entries.length : "-"}</td>
-      </tr>
-    `);
-  }
+      rows.push(`
+        <tr>
+          <td class="han-no">${g}班</td>
+          <td><span class="tag ${tagClass}">${tagLabel}</span>
+            ${status==="confirmed" ? `<div><button class="unlock-btn" onclick="unlockHan('${docId}')">確定を解除</button></div>` : ""}
+          </td>
+          <td>${c80}</td>
+          <td>${c90}</td>
+          <td>${c100}</td>
+          <td>${entries.length ? delivered + "/" + entries.length : "-"}</td>
+        </tr>
+      `);
+    }
+  });
   document.getElementById("total80").textContent = t80;
   document.getElementById("total90").textContent = t90;
   document.getElementById("total100").textContent = t100;
   document.getElementById("adminTableBody").innerHTML = rows.join("");
 }
 
-function unlockHan(han){
-  if(!confirm("第" + han + "班の確定を解除し、再編集できるようにしますか？")) return;
-  db.collection(COLLECTION).doc(han).set({ status: "draft" }, { merge:true }).catch(err=>console.error(err));
+function unlockHan(docId){
+  if(!confirm("この班の確定を解除し、再編集できるようにしますか？")) return;
+  db.collection(COLLECTION).doc(docId).set({ status: "draft" }, { merge:true }).catch(err=>console.error(err));
 }
 </script>
 </body>
