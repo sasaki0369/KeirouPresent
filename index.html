@@ -738,9 +738,9 @@ function addEntry(age){
 
   const patch = {
     status: currentData.status,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    entries: { [id]: entry }
   };
-  patch["entries." + id] = entry;
   db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
     .catch(err => {
       console.error(err);
@@ -758,8 +758,7 @@ function removeEntry(id){
   renderHan();
   removeLocalInfo(id);
 
-  const patch = {};
-  patch["entries." + id] = firebase.firestore.FieldValue.delete();
+  const patch = { entries: { [id]: firebase.firestore.FieldValue.delete() } };
   db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
     .catch(err => {
       console.error(err);
@@ -778,8 +777,7 @@ function toggleDelivered(id, value){
     renderHan();
   }
 
-  const patch = {};
-  patch["entries." + id + ".delivered"] = value;
+  const patch = { entries: { [id]: { delivered: value } } };
   db.collection(COLLECTION).doc(currentHanDocId()).set(patch, { merge:true })
     .catch(err => {
       console.error(err);
