@@ -351,9 +351,9 @@
         <div id="entryEmpty" class="empty hidden">まだ対象者が登録されていません。<br>下のボタンから追加してください。</div>
 
         <div class="add-row" id="addRow">
-          <button onclick="addEntry(80)">＋ 80歳を追加</button>
-          <button onclick="addEntry(90)">＋ 90歳を追加</button>
-          <button onclick="addEntry(100)">＋ 100歳を追加</button>
+          <button onclick="addEntry(80)">80歳を追加</button>
+          <button onclick="addEntry(90)">90歳を追加</button>
+          <button onclick="addEntry(100)">100歳を追加</button>
         </div>
       </section>
 
@@ -476,6 +476,28 @@ function hanLabel(branchId, groupNo){
   const b = branchById(branchId);
   return (b ? b.name : branchId) + " " + groupNo + "班";
 }
+
+// Firebase SDKの読み込み自体に失敗している場合（通信状況・広告ブロッカー等）は、
+// ボタンを押しても無反応になってしまうため、ここで検知して分かりやすく表示する
+if(typeof firebase === "undefined"){
+  document.body.innerHTML =
+    '<div style="max-width:420px;margin:60px auto;padding:24px;text-align:center;' +
+    'font-family:sans-serif;color:#7A2C19;background:#FBF0DE;border:1px solid #E3C98B;' +
+    'border-radius:8px;line-height:1.7;">' +
+    'アプリの読み込みに失敗しました。<br>電波の良い場所でページを再読み込みしてください。' +
+    '</div>';
+  throw new Error("Firebase SDKの読み込みに失敗しました（gstatic.comへの接続をご確認ください）");
+}
+
+// 想定外のエラーが起きた場合も、無反応ではなく画面下部に表示する
+window.addEventListener("error", function(e){
+  console.error(e.error || e.message);
+  const el = document.getElementById("connErrorBanner");
+  if(el){
+    el.textContent = "エラーが発生しました。反応がない場合はページを再読み込みしてください。";
+    el.classList.remove("hidden");
+  }
+});
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -801,12 +823,12 @@ function exportLocalInfo(){
   });
   if(navigator.clipboard){
     navigator.clipboard.writeText(text).then(()=>{
-      alert("控えをコピーしました。メモ帳などに貼り付けて保存してください。");
+      alert("控えをコピーしました。内容は以下のとおりです。\n\n" + text);
     }).catch(()=>{
-      prompt("以下をコピーしてください：", text);
+      prompt("自動コピーができませんでした。以下の内容を選択してコピーしてください：", text);
     });
   } else {
-    prompt("以下をコピーしてください：", text);
+    prompt("以下の内容を選択してコピーしてください：", text);
   }
 }
 
