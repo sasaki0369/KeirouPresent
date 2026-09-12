@@ -365,6 +365,8 @@
         <h2>お名前・ご住所の控え（この端末だけに保存）</h2>
         <p class="sub" style="margin-bottom:14px;">お名前やご住所は本部には送信されません。この端末の中だけに保存され、班長さまの手元の控えとしてお使いいただけます。</p>
         <button class="btn btn-outline" onclick="exportLocalInfo()">控えをテキストでコピーする</button>
+        <p class="sub" style="margin:16px 0 10px;">配布が完了したら、不要になったお名前・ご住所をこの端末から削除できます。</p>
+        <button class="btn btn-quiet" style="color:var(--danger); border-color:var(--danger);" onclick="clearDeliveredLocalInfo()">配布済みのお名前・住所をまとめて削除</button>
       </section>
     </main>
     <footer class="app-footer"><button onclick="logout()">ログアウト</button></footer>
@@ -654,8 +656,9 @@ function renderHan(){
             <button class="check-btn ${e.delivered ? "on" : ""}" onclick="toggleDelivered('${e.id}', ${!e.delivered})">${e.delivered ? "配布済み" : "配布済みにする"}</button>
           </div>
         </div>
-        <div style="margin-top:8px; display:flex; gap:14px;">
+        <div style="margin-top:8px; display:flex; gap:14px; flex-wrap:wrap;">
           <button class="icon-btn" onclick="openNameModal('${e.id}', ${idx+1})">お名前・住所を編集</button>
+          ${local && local.name ? `<button class="icon-btn" onclick="clearOneLocalInfo('${e.id}')" style="color:var(--danger);">お名前・住所を削除</button>` : ""}
           ${locked ? "" : `<button class="icon-btn" onclick="removeEntry('${e.id}')" style="color:var(--danger);">この対象者を削除</button>`}
         </div>
       `;
@@ -714,6 +717,21 @@ function removeLocalInfo(entryId){
   const all = getAllLocalInfo();
   delete all[entryId];
   localStorage.setItem(localKey(), JSON.stringify(all));
+}
+
+function clearOneLocalInfo(entryId){
+  if(!confirm("このかたのお名前・ご住所をこの端末から削除しますか？削除すると元に戻せません。")) return;
+  removeLocalInfo(entryId);
+  renderHan();
+}
+
+function clearDeliveredLocalInfo(){
+  const entries = currentData.entries || [];
+  const deliveredIds = entries.filter(e => e.delivered).map(e => e.id);
+  if(deliveredIds.length === 0){ alert("配布済みの対象者がまだいません。"); return; }
+  if(!confirm(`配布済みの${deliveredIds.length}件のお名前・ご住所をこの端末から削除します。削除すると元に戻せません。よろしいですか？`)) return;
+  deliveredIds.forEach(id => removeLocalInfo(id));
+  renderHan();
 }
 
 let editingEntryId = null;
