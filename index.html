@@ -1031,10 +1031,11 @@ function openNameModal(entryId, displayNo){
   const entry = currentData.entries && currentData.entries[entryId];
   editingEntryAge = entry ? entry.age : null;
   const info = getLocalInfo(entryId) || {name:"", address:"", birthYear:""};
+  const defaultBirthYear = editingEntryAge ? String(currentYear - editingEntryAge) : "";
   document.getElementById("nameModalTitle").textContent = "対象者" + displayNo + "の控え";
   document.getElementById("nameInput").value = info.name || "";
   document.getElementById("addressInput").value = info.address || "";
-  document.getElementById("birthYearInput").value = info.birthYear || "";
+  document.getElementById("birthYearInput").value = info.birthYear || defaultBirthYear;
   document.getElementById("nameModalBack").classList.add("show");
   checkBirthAgeMatch();
 }
