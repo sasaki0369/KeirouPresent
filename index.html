@@ -471,6 +471,9 @@
     <input type="text" id="nameInput" placeholder="例：山田 太郎">
     <label for="addressInput">ご住所</label>
     <input type="text" id="addressInput" placeholder="例：〇〇町3-4-5">
+    <label for="birthYearInput">生まれ年（西暦・年齢の確認用）</label>
+    <select id="birthYearInput" onchange="checkBirthAgeMatch()"></select>
+    <div id="birthAgeWarning" class="hidden" style="margin-top:8px; font-size:13px; color:var(--danger); background:#FBEBEB; border:1px solid #E8C4C4; border-radius:var(--radius); padding:8px 10px;"></div>
     <div class="modal-actions">
       <button class="btn btn-quiet" onclick="closeNameModal()">閉じる</button>
       <button class="btn btn-primary" onclick="saveNameModal()">保存する</button>
@@ -633,6 +636,20 @@ function saveSettings(){
     opt.textContent = y + "年度";
     if(y === current) opt.selected = true;
     sel.appendChild(opt);
+  }
+})();
+
+(function initBirthSelects(){
+  const current = new Date().getFullYear();
+  const yearSel = document.getElementById("birthYearInput");
+  const blankYear = document.createElement("option");
+  blankYear.value = ""; blankYear.textContent = "生まれ年を選択";
+  yearSel.appendChild(blankYear);
+  for(let y = current - 105; y <= current - 70; y++){
+    const opt = document.createElement("option");
+    opt.value = String(y);
+    opt.textContent = y + "年";
+    yearSel.appendChild(opt);
   }
 })();
 
@@ -816,7 +833,7 @@ function renderHan(){
         <div class="entry-row">
           <div>
             <div class="entry-title">対象者${idx+1} <span class="entry-age">・${e.age}歳</span><span class="status-pill ${pillClass}">${pillLabel}</span></div>
-            ${local && (local.name || local.address) ? `<div class="entry-name">${escapeHtml(local.name || "")}${local.name && local.address ? "　" : ""}${escapeHtml(local.address || "")}</div>` : `<div class="entry-name">お名前未登録</div>`}
+            ${local && (local.name || local.address) ? `<div class="entry-name">${escapeHtml(local.name || "")}${local.name && local.address ? "　" : ""}${escapeHtml(local.address || "")}${local.birthYear ? `　（${escapeHtml(local.birthYear)}年生）` : ""}</div>` : `<div class="entry-name">お名前未登録</div>`}
           </div>
           <div class="entry-actions">
             ${deliverBtnHtml}
@@ -824,7 +841,7 @@ function renderHan(){
         </div>
         <div style="margin-top:8px; display:flex; gap:14px; flex-wrap:wrap;">
           <button class="icon-btn" onclick="openNameModal('${e.id}', ${idx+1})">お名前・住所を編集</button>
-          ${local && (local.name || local.address) ? `<button class="icon-btn" onclick="clearOneLocalInfo('${e.id}')" style="color:var(--danger);">お名前・住所を削除</button>` : ""}
+          ${local && (local.name || local.address || local.birthYear) ? `<button class="icon-btn" onclick="clearOneLocalInfo('${e.id}')" style="color:var(--danger);">お名前・住所を削除</button>` : ""}
           ${e.delivered ? `<button class="icon-btn" onclick="revertDelivered('${e.id}')" style="color:var(--danger);">配布前に戻す</button>` : ""}
           ${locked ? "" : `<button class="icon-btn" onclick="removeEntry('${e.id}')" style="color:var(--danger);">この対象者を削除</button>`}
         </div>
@@ -1008,22 +1025,46 @@ function clearDeliveredLocalInfo(){
 }
 
 let editingEntryId = null;
+let editingEntryAge = null;
 function openNameModal(entryId, displayNo){
   editingEntryId = entryId;
-  const info = getLocalInfo(entryId) || {name:"", address:""};
+  const entry = currentData.entries && currentData.entries[entryId];
+  editingEntryAge = entry ? entry.age : null;
+  const info = getLocalInfo(entryId) || {name:"", address:"", birthYear:""};
   document.getElementById("nameModalTitle").textContent = "対象者" + displayNo + "の控え";
   document.getElementById("nameInput").value = info.name || "";
   document.getElementById("addressInput").value = info.address || "";
+  document.getElementById("birthYearInput").value = info.birthYear || "";
   document.getElementById("nameModalBack").classList.add("show");
+  checkBirthAgeMatch();
 }
 function closeNameModal(){
   document.getElementById("nameModalBack").classList.remove("show");
+  document.getElementById("birthAgeWarning").classList.add("hidden");
   editingEntryId = null;
+  editingEntryAge = null;
+}
+function checkBirthAgeMatch(){
+  const warnEl = document.getElementById("birthAgeWarning");
+  const birthYear = parseInt(document.getElementById("birthYearInput").value, 10);
+  if(!birthYear || !editingEntryAge){
+    warnEl.classList.add("hidden");
+    return;
+  }
+  // その年に満80/90/100歳になる方が対象なので、年度（西暦）− 生まれ年 で年齢がちょうど一致するはず
+  const expectedAge = currentYear - birthYear;
+  if(expectedAge !== editingEntryAge){
+    warnEl.textContent = `選択されている年齢区分は${editingEntryAge}歳ですが、生まれ年（${birthYear}年）だと${currentYear}年に${expectedAge}歳になります。年齢区分に誤りがないかご確認ください。`;
+    warnEl.classList.remove("hidden");
+  } else {
+    warnEl.classList.add("hidden");
+  }
 }
 function saveNameModal(){
   const name = document.getElementById("nameInput").value.trim();
   const address = document.getElementById("addressInput").value.trim();
-  setLocalInfo(editingEntryId, { name, address });
+  const birthYear = document.getElementById("birthYearInput").value;
+  setLocalInfo(editingEntryId, { name, address, birthYear });
   closeNameModal();
   renderHan();
 }
@@ -1035,7 +1076,8 @@ function exportLocalInfo(){
   let text = currentYear + "年度　" + hanLabel(currentBranch, currentGroup) + "　敬老祝い品 対象者控え\n\n";
   entries.forEach((e, idx) => {
     const info = all[e.id] || {};
-    text += `${idx+1}. ${e.age}歳　${info.name || "（未登録）"}　${info.address || ""}${e.delivered ? "　配布済み" : ""}\n`;
+    const birthText = info.birthYear ? `　${info.birthYear}年生` : "";
+    text += `${idx+1}. ${e.age}歳　${info.name || "（未登録）"}　${info.address || ""}${birthText}${e.delivered ? "　本人配布済み" : ""}\n`;
   });
   if(navigator.clipboard){
     navigator.clipboard.writeText(text).then(()=>{
