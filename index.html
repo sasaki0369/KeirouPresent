@@ -199,6 +199,14 @@
     font-family: inherit;
   }
   .check-btn.on{ background: var(--sage); color:#fff; border-color: var(--sage);}
+  .check-btn.wait{ background:#F2ECE0; color:#A69B84; border-color:#DDD0B8; cursor:not-allowed; }
+  .status-pill{
+    display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
+    margin-left:6px; vertical-align:middle; white-space:nowrap;
+  }
+  .status-pill.reg{ background:#F2ECE0; color:#8A7C64; }
+  .status-pill.picked{ background:#FBF0DE; color:#8A6317; }
+  .status-pill.done{ background:#EDF1E9; color:#3F5233; }
 
   .add-row{ display:flex; gap:8px; margin-top: 14px; }
   .add-row button{
@@ -413,7 +421,7 @@
           <h2>班ごとの状況</h2>
           <table class="admin-table">
             <thead>
-              <tr><th style="text-align:left;">班</th><th>状態</th><th>80</th><th>90</th><th>100</th><th>配布</th></tr>
+              <tr><th style="text-align:left;">班</th><th>状態</th><th>80</th><th>90</th><th>100</th><th>班長配布</th><th>本人配布</th></tr>
             </thead>
             <tbody id="adminTableBody"></tbody>
           </table>
@@ -790,15 +798,28 @@ function renderHan(){
       const local = getLocalInfo(e.id);
       const div = document.createElement("div");
       div.className = "entry" + (e.delivered ? " delivered" : "");
-      const deliveredLabel = e.delivered ? "配布済み（" + formatDateJp(e.deliveredAt) + "）" : "配布済みにする";
+
+      let pillClass = "reg", pillLabel = "登録";
+      if(e.pickedUp){ pillClass = "picked"; pillLabel = "班長配布済み"; }
+      if(e.delivered){ pillClass = "done"; pillLabel = "本人配布済み"; }
+
+      let deliverBtnHtml;
+      if(!e.pickedUp){
+        deliverBtnHtml = `<button class="check-btn wait" disabled title="本部から受け取ると押せるようになります">本部からの受け取り待ち</button>`;
+      } else if(e.delivered){
+        deliverBtnHtml = `<button class="check-btn on" onclick="openDeliverModal('${e.id}')">本人配布済み（${formatDateJp(e.deliveredAt)}）</button>`;
+      } else {
+        deliverBtnHtml = `<button class="check-btn" onclick="openDeliverModal('${e.id}')">本人へ配布済みにする</button>`;
+      }
+
       div.innerHTML = `
         <div class="entry-row">
           <div>
-            <div class="entry-title">対象者${idx+1} <span class="entry-age">・${e.age}歳</span></div>
+            <div class="entry-title">対象者${idx+1} <span class="entry-age">・${e.age}歳</span><span class="status-pill ${pillClass}">${pillLabel}</span></div>
             ${local && (local.name || local.address) ? `<div class="entry-name">${escapeHtml(local.name || "")}${local.name && local.address ? "　" : ""}${escapeHtml(local.address || "")}</div>` : `<div class="entry-name">お名前未登録</div>`}
           </div>
           <div class="entry-actions">
-            <button class="check-btn ${e.delivered ? "on" : ""}" onclick="openDeliverModal('${e.id}')">${deliveredLabel}</button>
+            ${deliverBtnHtml}
           </div>
         </div>
         <div style="margin-top:8px; display:flex; gap:14px; flex-wrap:wrap;">
@@ -815,7 +836,7 @@ function renderHan(){
 
 function addEntry(age){
   const id = "e" + Date.now() + Math.floor(Math.random()*1000);
-  const entry = { age, delivered:false, order: Date.now() };
+  const entry = { age, delivered:false, pickedUp:false, order: Date.now() };
 
   // 通信を待たず、まず画面にすぐ反映する（反応が分かるようにするため）
   if(!currentData.entries) currentData.entries = {};
@@ -901,8 +922,9 @@ function revertDelivered(id){
 
 let deliveringEntryId = null;
 function openDeliverModal(id){
-  deliveringEntryId = id;
   const entry = currentData.entries && currentData.entries[id];
+  if(!entry || !entry.pickedUp){ alert("本部から受け取ってから記録できます。"); return; }
+  deliveringEntryId = id;
   const dateInput = document.getElementById("deliverDateInput");
   dateInput.value = (entry && entry.deliveredAt) ? entry.deliveredAt : toLocalDateStr(new Date());
   document.getElementById("deliverModalBack").classList.add("show");
@@ -1059,7 +1081,7 @@ function renderAdmin(byHan){
   let t80=0, t90=0, t100=0;
   const rows = [];
   BRANCHES.forEach(branch => {
-    rows.push(`<tr><td colspan="6" style="text-align:left;background:#F2ECE0;font-weight:700;color:var(--accent-deep);">${branch.name}</td></tr>`);
+    rows.push(`<tr><td colspan="7" style="text-align:left;background:#F2ECE0;font-weight:700;color:var(--accent-deep);">${branch.name}</td></tr>`);
     for(let g=1; g<=branch.groups; g++){
       const docId = hanDocId(branch.id, g);
       const data = byHan[docId];
@@ -1068,11 +1090,21 @@ function renderAdmin(byHan){
       const c80 = entries.filter(e=>e.age===80).length;
       const c90 = entries.filter(e=>e.age===90).length;
       const c100 = entries.filter(e=>e.age===100).length;
+      const pickedUp = entries.filter(e=>e.pickedUp).length;
       const delivered = entries.filter(e=>e.delivered).length;
       if(status === "confirmed"){ t80+=c80; t90+=c90; t100+=c100; }
 
       const tagClass = status === "confirmed" ? "confirmed" : (status === "draft" && entries.length>0 ? "draft" : "none");
       const tagLabel = status === "confirmed" ? "確定済み" : (entries.length>0 ? "入力中" : "未入力");
+
+      let pickedUpCellHtml;
+      if(entries.length === 0){
+        pickedUpCellHtml = "-";
+      } else if(pickedUp === entries.length){
+        pickedUpCellHtml = `${pickedUp}/${entries.length}<div><button class="unlock-btn" onclick="setPickedUpForHan('${docId}', false)">解除する</button></div>`;
+      } else {
+        pickedUpCellHtml = `${pickedUp}/${entries.length}<div><button class="unlock-btn" onclick="setPickedUpForHan('${docId}', true)">班長配布にする</button></div>`;
+      }
 
       rows.push(`
         <tr>
@@ -1084,6 +1116,7 @@ function renderAdmin(byHan){
           <td>${c80}</td>
           <td>${c90}</td>
           <td>${c100}</td>
+          <td>${pickedUpCellHtml}</td>
           <td>${entries.length ? delivered + "/" + entries.length : "-"}</td>
         </tr>
       `);
@@ -1093,6 +1126,18 @@ function renderAdmin(byHan){
   document.getElementById("total90").textContent = t90;
   document.getElementById("total100").textContent = t100;
   document.getElementById("adminTableBody").innerHTML = rows.join("");
+}
+
+function setPickedUpForHan(docId, value){
+  const label = value ? "班長配布済みにします。よろしいですか？" : "班長配布の状態を解除します。よろしいですか？";
+  if(!confirm(label)) return;
+  const data = latestAdminByHan[docId];
+  const entries = entriesArray(data);
+  if(entries.length === 0) return;
+  const patch = { entries: {} };
+  entries.forEach(e => { patch.entries[e.id] = { pickedUp: value }; });
+  db.collection(COLLECTION).doc(docId).set(patch, { merge:true })
+    .catch(err => { console.error(err); alert("更新に失敗しました。通信状況をご確認のうえ、もう一度お試しください。"); });
 }
 
 function renderAdminSummary(byHan){
